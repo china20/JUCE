@@ -78,6 +78,9 @@ public:
 protected:
     //==============================================================================
     AudioPluginInstance() {}
+    AudioPluginInstance (const AudioIOProperties& ioLayouts) : AudioProcessor (ioLayouts) {}
+    template <int numLayouts>
+    AudioPluginInstance (const short channelLayoutList[numLayouts][2]) : AudioProcessor (channelLayoutList) {}
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginInstance)
 };

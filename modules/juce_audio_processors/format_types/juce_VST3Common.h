@@ -199,7 +199,7 @@ static inline AudioChannelSet::ChannelType getChannelType (Steinberg::Vst::Speak
     return AudioChannelSet::unknown;
 }
 
-static inline Steinberg::Vst::SpeakerArrangement getSpeakerArrangement (const AudioChannelSet& channels) noexcept
+static inline Steinberg::Vst::SpeakerArrangement getVst3SpeakerArrangement (const AudioChannelSet& channels) noexcept
 {
      // treat mono as special case as we do not have a designated mono speaker
     if (channels == AudioChannelSet::mono())
@@ -470,12 +470,12 @@ struct VST3BufferExchange
         vstBuffers.silenceFlags     = 0;
     }
 
-    static void mapArrangementToBusses (int& channelIndexOffset, int index,
+    static void mapArrangementToBuses (int& channelIndexOffset, int index,
                                         Array<Steinberg::Vst::AudioBusBuffers>& result,
-                                        BusMap& busMapToUse, Steinberg::Vst::SpeakerArrangement arrangement,
+                                        BusMap& busMapToUse, const AudioChannelSet& arrangement,
                                         AudioBuffer<FloatType>& source)
     {
-        const int numChansForBus = BigInteger ((juce::int64) arrangement).countNumberOfSetBits();
+        const int numChansForBus = arrangement.size();
 
         if (index >= result.size())
             result.add (Steinberg::Vst::AudioBusBuffers());
@@ -491,26 +491,26 @@ struct VST3BufferExchange
         channelIndexOffset += numChansForBus;
     }
 
-    static inline void mapBufferToBusses (Array<Steinberg::Vst::AudioBusBuffers>& result, BusMap& busMapToUse,
-                                          const Array<Steinberg::Vst::SpeakerArrangement>& arrangements,
+    static inline void mapBufferToBuses (Array<Steinberg::Vst::AudioBusBuffers>& result, BusMap& busMapToUse,
+                                          const Array<AudioChannelSet>& arrangements,
                                           AudioBuffer<FloatType>& source)
     {
         int channelIndexOffset = 0;
 
         for (int i = 0; i < arrangements.size(); ++i)
-            mapArrangementToBusses (channelIndexOffset, i, result, busMapToUse,
+            mapArrangementToBuses (channelIndexOffset, i, result, busMapToUse,
                                     arrangements.getUnchecked (i), source);
     }
 
-    static inline void mapBufferToBusses (Array<Steinberg::Vst::AudioBusBuffers>& result,
+    static inline void mapBufferToBuses (Array<Steinberg::Vst::AudioBusBuffers>& result,
                                           Steinberg::Vst::IAudioProcessor& processor,
-                                          BusMap& busMapToUse, bool isInput, int numBusses,
+                                          BusMap& busMapToUse, bool isInput, int numBuses,
                                           AudioBuffer<FloatType>& source)
     {
         int channelIndexOffset = 0;
 
-        for (int i = 0; i < numBusses; ++i)
-            mapArrangementToBusses (channelIndexOffset, i,
+        for (int i = 0; i < numBuses; ++i)
+            mapArrangementToBuses (channelIndexOffset, i,
                                     result, busMapToUse,
                                     getArrangementForBus (&processor, isInput, i),
                                     source);

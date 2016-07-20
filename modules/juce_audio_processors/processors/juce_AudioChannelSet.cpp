@@ -258,3 +258,17 @@ AudioChannelSet AudioChannelSet::canonicalChannelSet (int numChannels)
 
     return discreteChannels (numChannels);
 }
+
+AudioChannelSet AudioChannelSet::namedChannelSet (int numChannels)
+{
+    if (numChannels == 1) return AudioChannelSet::mono();
+    if (numChannels == 2) return AudioChannelSet::stereo();
+    if (numChannels == 3) return AudioChannelSet::createLCR();
+    if (numChannels == 4) return AudioChannelSet::quadraphonic();
+    if (numChannels == 5) return AudioChannelSet::create5point0();
+    if (numChannels == 6) return AudioChannelSet::create5point1();
+    if (numChannels == 7) return AudioChannelSet::create7point0();
+    if (numChannels == 8) return AudioChannelSet::create7point1();
+
+    return AudioChannelSet();
+}

@@ -34,9 +34,11 @@ static Array <PluginWindow*> activePluginWindows;
 
 PluginWindow::PluginWindow (Component* const pluginEditor,
                             AudioProcessorGraph::Node* const o,
-                            WindowFormatType t)
+                            WindowFormatType t,
+                            AudioProcessorGraph& audioGraph)
     : DocumentWindow (pluginEditor->getName(), Colours::lightblue,
                       DocumentWindow::minimiseButton | DocumentWindow::closeButton),
+      graph (audioGraph),
       owner (o),
       type (t)
 {
@@ -152,9 +154,643 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ProgramAudioProcessorEditor)
 };
 
+class IOConfigurationAudioProcessorEditor : public AudioProcessorEditor, public Button::Listener
+{
+    struct InputOutputConfig;
+
+public:
+    IOConfigurationAudioProcessorEditor (AudioProcessor* const p)
+        : AudioProcessorEditor (p),
+          title ("title", p->getName()),
+          applyButton ("Apply")
+    {
+        jassert (p != nullptr);
+        setOpaque (true);
+
+        title.setFont (title.getFont().withStyle (Font::bold));
+        addAndMakeVisible (title);
+        applyButton.addListener (this);
+
+        if (p->getBusCount (true)  > 0 || p->canAddBus (true))
+            addAndMakeVisible (inConfig = new InputOutputConfig (*this, true));
+
+        if (p->getBusCount (false) > 0 || p->canAddBus (false))
+            addAndMakeVisible (outConfig = new InputOutputConfig (*this, false));
+
+        addAndMakeVisible (applyButton);
+
+        currentLayout = p->getBusLayouts();
+
+        if (inConfig != nullptr)
+            inConfig->updateBusConfig (currentLayout.inputBuses);
+
+        if (outConfig != nullptr)
+            outConfig->updateBusConfig (currentLayout.outputBuses);
+
+        setSize (400, (inConfig != nullptr && outConfig != nullptr ? 160 : 0) + 250);
+    };
+
+    void paint (Graphics& g) override
+    {
+        g.fillAll (Colours::white);
+    }
+
+    void resized() override
+    {
+        Rectangle<int> r = getLocalBounds().reduced (10);
+
+        title.setBounds (r.removeFromTop (14));
+        r.reduce (10, 0);
+
+        if (inConfig != nullptr)
+            inConfig->setBounds (r.removeFromTop (160));
+
+        if (outConfig != nullptr)
+            outConfig->setBounds (r.removeFromTop (160));
+
+        applyButton.setBounds (r.removeFromRight (80));
+    }
+
+    void suspend()
+    {
+        if (AudioProcessorGraph* graph = getGraph())
+        {
+            graph->suspendProcessing (true);
+            graph->releaseResources();
+        }
+    }
+
+    void resume()
+    {
+        if (AudioProcessorGraph* graph = getGraph())
+        {
+            graph->prepareToPlay (graph->getSampleRate(), graph->getBlockSize());
+            graph->suspendProcessing (false);
+
+            if (GraphDocumentComponent* graphEditor = getGraphEditor())
+                if (GraphEditorPanel* panel = graphEditor->graphPanel)
+                    panel->updateComponents();
+        }
+    }
+
+    void buttonClicked (Button*) override
+    {
+        bool wasSuccesful = true;
+
+        if (AudioProcessor* p = getAudioProcessor())
+        {
+            if (currentLayout != p->getBusLayouts())
+            {
+                suspend();
+                wasSuccesful = p->setBusLayouts (currentLayout);
+                resume();
+            }
+
+            if (wasSuccesful)
+                getTopLevelComponent()->userTriedToCloseWindow();
+            else
+                getLookAndFeel().playAlertSound();
+        }
+    }
+
+    void updateConfig (const AudioChannelSet& set, bool isInput, int busIdx)
+    {
+        AudioProcessor::AudioBusLayouts newLayout = currentLayout;
+        newLayout.getChannelSet (isInput, busIdx) = set;
+
+        if (currentLayout != newLayout)
+        {
+            if (AudioProcessor* p = getAudioProcessor())
+            {
+                newLayout = p->getNextBestLayout (newLayout);
+                currentLayout = newLayout;
+
+                if (inConfig != nullptr)
+                    inConfig->updateBusConfig (currentLayout.inputBuses);
+
+                if (outConfig != nullptr)
+                    outConfig->updateBusConfig (currentLayout.outputBuses);
+            }
+        }
+    }
+
+    void addBus (bool isInput)
+    {
+        if (AudioProcessor* p = getAudioProcessor())
+        {
+            suspend();
+            bool wasSuccesful = p->addBus (isInput);
+
+            if (wasSuccesful)
+            {
+                currentLayout = p->getBusLayouts();
+
+                if (inConfig != nullptr)
+                    inConfig->updateBusConfig (currentLayout.inputBuses);
+
+                if (outConfig != nullptr)
+                    outConfig->updateBusConfig (currentLayout.outputBuses);
+
+                if (inConfig != nullptr && isInput)
+                    inConfig->updateSupported();
+
+                if (outConfig != nullptr && ! isInput)
+                    outConfig->updateSupported();
+            }
+            else
+                LookAndFeel::getDefaultLookAndFeel().playAlertSound();
+
+            resume();
+        }
+    }
+
+    void removeBus (bool isInput)
+    {
+        if (AudioProcessor* p = getAudioProcessor())
+        {
+            suspend();
+            bool wasSuccesful = p->removeBus (isInput);
+
+            if (wasSuccesful)
+            {
+                currentLayout = p->getBusLayouts();
+
+                if (inConfig != nullptr)
+                    inConfig->updateBusConfig (currentLayout.inputBuses);
+
+                if (outConfig != nullptr)
+                    outConfig->updateBusConfig (currentLayout.outputBuses);
+
+                if (inConfig != nullptr && isInput)
+                    inConfig->updateSupported();
+
+                if (outConfig != nullptr && ! isInput)
+                    outConfig->updateSupported();
+            }
+
+            resume();
+        }
+    }
+private:
+    MainHostWindow* getMainWindow() const
+    {
+       Component* comp;
+
+        for (int idx = 0; (comp = Desktop::getInstance().getComponent(idx)) != nullptr; ++idx)
+            if (MainHostWindow* mainWindow = dynamic_cast<MainHostWindow*> (comp))
+                return mainWindow;
+
+        return nullptr;
+    }
+
+    GraphDocumentComponent* getGraphEditor() const
+    {
+        if (MainHostWindow* mainWindow = getMainWindow())
+        {
+            if (GraphDocumentComponent* graphEditor = mainWindow->getGraphEditor())
+                return graphEditor;
+        }
+
+        return nullptr;
+    }
+
+    AudioProcessorGraph* getGraph() const
+    {
+        if (GraphDocumentComponent* graphEditor = getGraphEditor())
+            return &graphEditor->graph.getGraph();
+
+        return nullptr;
+    }
+
+    //==============================================================================
+    struct InputOutputConfig : Component, ComboBox::Listener, Button::Listener
+    {
+        InputOutputConfig (IOConfigurationAudioProcessorEditor& parent, bool direction)
+            : owner (parent),
+              ioTitle ("ioLabel", direction ? "Input Configuration" : "Output Configuration"),
+              nameLabel ("nameLabel", "Bus Name:"),
+              layoutLabel ("layoutLabel", "Channel Layout:"),
+              enabledToggle ("Enabled"),
+              ioBuses (*this, direction),
+              isInput (direction),
+              currentBus (-1)
+        {
+            updateSupported();
+
+            ioTitle.setFont (ioTitle.getFont().withStyle (Font::bold));
+            nameLabel.setFont (nameLabel.getFont().withStyle (Font::bold));
+            layoutLabel.setFont (layoutLabel.getFont().withStyle (Font::bold));
+            enabledToggle.setClickingTogglesState (true);
+
+            layouts.addListener (this);
+            enabledToggle.addListener (this);
+
+            addAndMakeVisible (layoutLabel);
+            addAndMakeVisible (layouts);
+            addAndMakeVisible (enabledToggle);
+            addAndMakeVisible (ioTitle);
+            addAndMakeVisible (nameLabel);
+            addAndMakeVisible (name);
+            addAndMakeVisible (ioBuses);
+        }
+
+        void paint (Graphics& g) override
+        {
+            g.fillAll (Colours::white);
+        }
+
+        void resized() override
+        {
+            Rectangle<int> r = getLocalBounds().reduced (10);
+
+            ioTitle.setBounds (r.removeFromTop (14));
+            r.reduce (10, 0);
+            r.removeFromTop (16);
+
+            ioBuses.setBounds (r.removeFromTop (ioBuses.getHeight()));
+
+            {
+                Rectangle<int> label = r.removeFromTop (24);
+
+                nameLabel.setBounds (label.removeFromLeft (100));
+                enabledToggle.setBounds (label.removeFromRight (80));
+                name.setBounds (label);
+            }
+
+            {
+                Rectangle<int> label = r.removeFromTop (24);
+
+                layoutLabel.setBounds (label.removeFromLeft (100));
+                layouts.setBounds (label);
+            }
+        }
+
+        void setBus (int busIdx)
+        {
+            if (busIdx != currentBus)
+            {
+                currentBus = busIdx;
+                updateDisplay();
+            }
+        }
+
+        void updateSupported()
+        {
+            viableLayouts.clear();
+            if (AudioProcessor* processor = owner.getAudioProcessor())
+            {
+                const int n = processor->getBusCount (isInput);
+                for (int busIdx = 0; busIdx < n; ++busIdx)
+                {
+                    Array<AudioChannelSet> supported;
+
+                    if (AudioProcessor::AudioProcessorBus* bus = processor->getBus (isInput, busIdx))
+                    {
+                        for (int i = 0; i <= AudioChannelSet::maxChannelsOfNamedLayout; ++i)
+                        {
+                            AudioChannelSet set;
+
+                            if      (bus->isLayoutSupported (set = AudioChannelSet::namedChannelSet(i)))
+                                supported.addIfNotAlreadyThere (set);
+                            else if (bus->isLayoutSupported (set = AudioChannelSet::discreteChannels (i)))
+                                supported.addIfNotAlreadyThere (set);
+                        }
+
+                        supported.addIfNotAlreadyThere (bus->getLastEnabledLayout());
+                        viableLayouts.add (supported);
+                    }
+                }
+            }
+
+            ioBuses.updateConfig();
+        }
+
+        void updateDisplay()
+        {
+            if (AudioProcessor* processor = owner.getAudioProcessor())
+            {
+                if (AudioProcessor::AudioProcessorBus* bus = processor->getBus (isInput, currentBus))
+                {
+                    ioBuses.setEnabled (true);
+                    const Array<AudioChannelSet>& supported = viableLayouts.getReference (currentBus);
+                    const AudioChannelSet& currentSet = currentLayouts.getReference (currentBus);
+
+                    name.setText (bus->getName(), NotificationType::dontSendNotification);
+
+                    if (supported.contains (AudioChannelSet()))
+                    {
+                        enabledToggle.setEnabled (true);
+                        enabledToggle.setToggleState (enabledLayouts [currentBus], NotificationType::dontSendNotification);
+                    }
+                    else
+                    {
+                        enabledToggle.setEnabled (false);
+                        enabledToggle.setToggleState (true, NotificationType::dontSendNotification);
+                    }
+
+                    layouts.clear();
+                    layouts.setEnabled (true);
+
+                    const int n = supported.size();
+                    for (int i = 0; i < n; ++i)
+                    {
+                        const AudioChannelSet& set = supported.getReference (i);
+
+                        if (! set.isDisabled())
+                            layouts.addItem (set.getDescription(), i + 1);
+                    }
+
+                    if (! currentSet.isDisabled())
+                    {
+                        const int currentLayoutIdx = supported.indexOf (currentSet);
+                        jassert (currentLayoutIdx != -1);
+
+                        layouts.setSelectedId (currentLayoutIdx + 1, NotificationType::dontSendNotification);
+                    }
+                }
+                else
+                {
+                    ioBuses.setEnabled (false);
+                    layouts.clear();
+                    name.setText ("", NotificationType::dontSendNotification);
+                    enabledToggle.setEnabled (false);
+                    layouts.setEnabled (false);
+                }
+            }
+        }
+
+        void updateBusConfig (const Array<AudioChannelSet>& busLayouts)
+        {
+            if (busLayouts != currentLayouts)
+            {
+                const bool numberOfBussesHasChanged = (busLayouts.size() != currentLayouts.size());
+
+                enabledLayouts.clear();
+                for (int i = 0; i < busLayouts.size(); ++i)
+                {
+                    const AudioChannelSet& newSet = busLayouts.getReference (i);
+
+                    const bool enabled = ! newSet.isDisabled();
+                    enabledLayouts.setBit (i, enabled);
+
+                    if (enabled)
+                    {
+                        if (i >= currentLayouts.size())
+                            currentLayouts.add (newSet);
+                        else
+                            currentLayouts.getReference (i) = newSet;
+                    }
+                    else
+                    {
+                        if (i >= currentLayouts.size())
+                            currentLayouts.add (owner.getAudioProcessor()->getBus (isInput, i)->getDefaultLayout());
+                    }
+                }
+
+                if (numberOfBussesHasChanged)
+                {
+                    updateSupported();
+                    const int lastBus = currentLayouts.size() - 1;
+                    setBus (jmin (lastBus, currentBus >= 0 ? currentBus : lastBus));
+                }
+
+                const Array<AudioChannelSet>& supported = viableLayouts.getReference (currentBus);
+                const AudioChannelSet& currentSet = currentLayouts.getReference (currentBus);
+
+                if (! enabledLayouts[currentBus])
+                {
+                    enabledToggle.setToggleState (false, NotificationType::dontSendNotification);
+                }
+                else
+                {
+                    enabledToggle.setToggleState (true, NotificationType::dontSendNotification);
+                    const int currentLayoutIdx = supported.indexOf (currentSet);
+                    jassert (currentLayoutIdx != -1);
+
+                    layouts.setSelectedId (currentLayoutIdx + 1, NotificationType::dontSendNotification);
+                }
+            }
+        }
+
+        void comboBoxChanged (ComboBox*) override
+        {
+            const Array<AudioChannelSet>& supported = viableLayouts.getReference (currentBus);
+            const int layoutIndex = layouts.getSelectedId() - 1;
+
+            if (layoutIndex >= supported.size())
+                return;
+
+            const AudioChannelSet& set = supported.getReference (layoutIndex);
+            AudioChannelSet& currentSet = currentLayouts.getReference (currentBus);
+
+            if (set != currentSet)
+            {
+                const bool isEnabled = enabledLayouts[currentBus];
+
+                if (!isEnabled)
+                    currentSet = set;
+
+                owner.updateConfig (isEnabled ? set : AudioChannelSet(), isInput, currentBus);
+            }
+        }
+
+        void buttonClicked (Button*) override {}
+
+        void buttonStateChanged (Button*) override
+        {
+            const AudioChannelSet& currentSet = currentLayouts.getReference (currentBus);
+            const Array<AudioChannelSet>& supported = viableLayouts.getReference (currentBus);
+            const bool shouldEnable = enabledToggle.getToggleState();
+
+            if (enabledToggle.isEnabled() && shouldEnable != enabledLayouts [currentBus])
+            {
+                const int layoutIndex = layouts.getSelectedId() - 1;
+                const AudioChannelSet requestedSet = supported.getReference (layoutIndex);
+
+                if (requestedSet != currentSet || shouldEnable != enabledLayouts [currentBus])
+                    owner.updateConfig (shouldEnable ? requestedSet : AudioChannelSet(), isInput, currentBus);
+            }
+        }
+
+        //==============================================================================
+        struct BusButtonContent : Component, Button::Listener
+        {
+            BusButtonContent (InputOutputConfig& parent, bool isInputToUse)
+                : owner (parent), currentBus (0), lastNumBuses (0), plusBus ("+"), minusBus ("-"), isInput (isInputToUse)
+            {
+                {
+                    plusBus. setConnectedEdges (Button::ConnectedOnLeft | Button::ConnectedOnRight | Button::ConnectedOnTop | Button::ConnectedOnBottom);
+                    minusBus.setConnectedEdges (Button::ConnectedOnLeft | Button::ConnectedOnRight | Button::ConnectedOnTop | Button::ConnectedOnBottom);
+
+                    addAndMakeVisible (plusBus);
+                    addAndMakeVisible (minusBus);
+
+                    plusBus. addListener (this);
+                    minusBus.addListener (this);
+                }
+
+                setSize (channelButtonWidth, 40);
+            }
+
+            void updateConfig()
+            {
+                if (AudioProcessor* p = owner.owner.getAudioProcessor())
+                {
+                    const int numBuses = p->getBusCount (isInput);
+                    if (lastNumBuses != numBuses)
+                    {
+                        lastNumBuses = numBuses;
+                        buses.clear();
+
+                        currentBus = jmin (numBuses - 1, currentBus);
+
+                        for (int i = 0; i < numBuses; ++i)
+                        {
+                            TextButton* button = new TextButton (String (i + 1));
+                            button->setConnectedEdges (Button::ConnectedOnLeft | Button::ConnectedOnRight | Button::ConnectedOnTop | Button::ConnectedOnBottom);
+                            button->setRadioGroupId (1, NotificationType::dontSendNotification);
+                            button->setClickingTogglesState (true);
+
+                            Colour busColour = Colours::green.withRotatedHue (static_cast<float> (i) / 5.0f);
+                            button->setColour (TextButton::buttonColourId, busColour);
+                            button->setColour (TextButton::buttonOnColourId, busColour.withMultipliedBrightness (2.0f));
+                            button->setTooltip (p->getBus (isInput, i)->getName());
+
+                            button->setToggleState (i == currentBus, NotificationType::dontSendNotification);
+
+                            addAndMakeVisible (buses.add (button));
+                        }
+
+                        for (int i = 0; i < numBuses; ++i)
+                            buses[i]->addListener (this);
+                    }
+
+                    plusBus. setEnabled (p->canAddBus (isInput));
+                    minusBus.setEnabled (numBuses > 1 && p->canRemoveBus (isInput));
+
+                    setSize ((numBuses + 1) * channelButtonWidth, 60);
+                    repaint();
+                }
+            }
+
+            void buttonClicked (Button* btn) override
+            {
+                if      (btn == &plusBus)  owner.owner.addBus (isInput);
+                else if (btn == &minusBus) owner.owner.removeBus (isInput);
+            }
+
+            void buttonStateChanged (Button* btn) override
+            {
+                int busIdx;
+
+                if (btn->getToggleState())
+                {
+                    if (TextButton* textButton = dynamic_cast<TextButton*> (btn))
+                    {
+                        if (textButton->getToggleState() && (busIdx = buses.indexOf (textButton)) >= 0 && busIdx != currentBus)
+                        {
+                            currentBus = busIdx;
+                            owner.setBus (busIdx);
+                        }
+                    }
+                }
+            }
+
+            void paint (Graphics& g) override
+            {
+                g.fillAll (Colours::grey);
+            }
+
+            void resized() override
+            {
+                Rectangle<int> r = getLocalBounds();
+                r.removeFromBottom (20);
+
+                for (int i = 0; i < buses.size(); ++i)
+                    buses[i]->setBounds (r.removeFromLeft (channelButtonWidth));
+
+                minusBus.setBounds (r.removeFromLeft (channelButtonWidth >> 1));
+                plusBus.setBounds (r.removeFromLeft (channelButtonWidth >> 1));
+            }
+
+            //==============================================================================
+            InputOutputConfig& owner;
+            static const int channelButtonWidth;
+            int currentBus, lastNumBuses;
+
+            OwnedArray<TextButton> buses;
+            TextButton plusBus, minusBus;
+            bool isInput;
+            JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BusButtonContent)
+        };
+
+        //==============================================================================
+        struct BusButtonHolder : Component
+        {
+            BusButtonHolder (InputOutputConfig& parent, bool isInputBus)
+                : content (parent, isInputBus)
+            {
+                viewport.setViewedComponent (&content, false);
+                viewport.setScrollBarsShown (false, true);
+
+                addAndMakeVisible (viewport);
+
+                setSize (400, content.getHeight() + 20);
+            }
+
+            void paint (Graphics& g) override
+            {
+                g.fillAll (Colours::lightgrey);
+                g.drawRect (getLocalBounds());
+            }
+
+            void updateConfig()
+            {
+                content.updateConfig();
+            }
+
+            void resized() override
+            {
+                viewport.setBounds (getLocalBounds().reduced (1));
+            }
+
+            //==============================================================================
+            Viewport viewport;
+            BusButtonContent content;
+
+            JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BusButtonHolder)
+        };
+
+        //==============================================================================
+        IOConfigurationAudioProcessorEditor& owner;
+        Label ioTitle, nameLabel, name, layoutLabel;
+        ToggleButton enabledToggle;
+        ComboBox layouts;
+        BusButtonHolder ioBuses;
+        bool isInput;
+        int currentBus;
+        Array<Array<AudioChannelSet> > viableLayouts;
+        Array<AudioChannelSet> currentLayouts;
+        BigInteger enabledLayouts;
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InputOutputConfig)
+    };
+
+    //==============================================================================
+    AudioProcessor::AudioBusLayouts currentLayout;
+    Label title;
+    ScopedPointer<InputOutputConfig> inConfig, outConfig;
+    TextButton applyButton;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (IOConfigurationAudioProcessorEditor)
+};
+
+const int IOConfigurationAudioProcessorEditor::InputOutputConfig::BusButtonContent::channelButtonWidth = 40;
+
 //==============================================================================
 PluginWindow* PluginWindow::getWindowFor (AudioProcessorGraph::Node* const node,
-                                          WindowFormatType type)
+                                          WindowFormatType type,
+                                          AudioProcessorGraph& audioGraph)
 {
     jassert (node != nullptr);
 
@@ -180,6 +816,8 @@ PluginWindow* PluginWindow::getWindowFor (AudioProcessorGraph::Node* const node,
             ui = new GenericAudioProcessorEditor (processor);
         else if (type == Programs)
             ui = new ProgramAudioProcessorEditor (processor);
+        else if (type == AudioIO)
+            ui = new IOConfigurationAudioProcessorEditor (processor);
     }
 
     if (ui != nullptr)
@@ -187,7 +825,7 @@ PluginWindow* PluginWindow::getWindowFor (AudioProcessorGraph::Node* const node,
         if (AudioPluginInstance* const plugin = dynamic_cast<AudioPluginInstance*> (processor))
             ui->setName (plugin->getName());
 
-        return new PluginWindow (ui, node, type);
+        return new PluginWindow (ui, node, type, audioGraph);
     }
 
     return nullptr;
@@ -221,6 +859,7 @@ public:
         : filterID (filterID_),
           index (index_),
           isInput (isInput_),
+          busIdx (0),
           graph (graph_)
     {
         if (const AudioProcessorGraph::Node::Ptr node = graph.getNodeForId (filterID_))
@@ -234,17 +873,18 @@ public:
             }
             else
             {
-                const AudioProcessor::AudioBusArrangement& busArrangement = node->getProcessor()->busArrangement;
+                const AudioProcessor& processor = *node->getProcessor();
 
-                const Array<AudioProcessor::AudioProcessorBus>& buses = isInput ? busArrangement.inputBuses
-                                                                                : busArrangement.outputBuses;
+                int channel;
+                channel = processor.getOffsetInBusBufferForAbsoluteChannelIndex (isInput, index, busIdx);
 
-                if (buses.size() > 0)
-                    tip = AudioChannelSet::getChannelTypeName (buses.getReference(0).channels.getTypeOfChannel (index));
+                if (const AudioProcessor::AudioProcessorBus* bus = processor.getBus (isInput, busIdx))
+                    tip = bus->getName() + String (": ")
+                          + AudioChannelSet::getAbbreviatedChannelTypeName (bus->getCurrentLayout().getTypeOfChannel (channel));
+                else
+                    tip = (isInput ? "Main Input: "
+                           : "Main Output: ") + String (index + 1);
 
-                if (tip.isEmpty())
-                    tip = (isInput ? "Input "
-                                   : "Output ") + String (index + 1);
             }
 
             setTooltip (tip);
@@ -263,7 +903,9 @@ public:
 
         p.addRectangle (w * 0.4f, isInput ? (0.5f * h) : 0.0f, w * 0.2f, h * 0.5f);
 
-        g.setColour (index == FilterGraph::midiChannelNumber ? Colours::red : Colours::green);
+        Colour colour = (index == FilterGraph::midiChannelNumber ? Colours::red : Colours::green);
+
+        g.setColour (colour.withRotatedHue (static_cast<float> (busIdx) / 5.0f));
         g.fillPath (p);
     }
 
@@ -289,6 +931,7 @@ public:
     const uint32 filterID;
     const int index;
     const bool isInput;
+    int busIdx;
 
 private:
     FilterGraph& graph;
@@ -342,7 +985,9 @@ public:
             m.addItem (3, "Show plugin UI");
             m.addItem (4, "Show all programs");
             m.addItem (5, "Show all parameters");
-            m.addItem (6, "Test state save/load");
+            m.addSeparator();
+            m.addItem (6, "Configure Audio I/O");
+            m.addItem (7, "Test state save/load");
 
             const int r = m.show();
 
@@ -362,7 +1007,7 @@ public:
                     AudioProcessor* const processor = f->getProcessor();
                     jassert (processor != nullptr);
 
-                    if (r == 6)
+                    if (r == 7)
                     {
                         MemoryBlock state;
                         processor->getStateInformation (state);
@@ -377,11 +1022,12 @@ public:
                         {
                             case 4: type = PluginWindow::Programs; break;
                             case 5: type = PluginWindow::Parameters; break;
+                            case 6: type = PluginWindow::AudioIO; break;
 
                             default: break;
                         };
 
-                        if (PluginWindow* const w = PluginWindow::getWindowFor (f, type))
+                        if (PluginWindow* const w = PluginWindow::getWindowFor (f, type, graph.getGraph()))
                             w->toFront (true);
                     }
                 }
@@ -415,7 +1061,7 @@ public:
         else if (e.getNumberOfClicks() == 2)
         {
             if (const AudioProcessorGraph::Node::Ptr f = graph.getNodeForId (filterID))
-                if (PluginWindow* const w = PluginWindow::getWindowFor (f, PluginWindow::Normal))
+                if (PluginWindow* const w = PluginWindow::getWindowFor (f, PluginWindow::Normal, graph.getGraph()))
                     w->toFront (true);
         }
     }
@@ -450,16 +1096,31 @@ public:
 
     void resized() override
     {
-        for (int i = 0; i < getNumChildComponents(); ++i)
+        if (AudioProcessorGraph::Node::Ptr f = graph.getNodeForId (filterID))
         {
-            if (PinComponent* const pc = dynamic_cast<PinComponent*> (getChildComponent(i)))
+            if (AudioProcessor* const processor = f->getProcessor())
             {
-                const int total = pc->isInput ? numIns : numOuts;
-                const int index = pc->index == FilterGraph::midiChannelNumber ? (total - 1) : pc->index;
+                for (int i = 0; i < getNumChildComponents(); ++i)
+                {
+                    if (PinComponent* const pc = dynamic_cast<PinComponent*> (getChildComponent(i)))
+                    {
+                        const bool isInput = pc->isInput;
+                        int busIdx, channelIdx;
 
-                pc->setBounds (proportionOfWidth ((1 + index) / (total + 1.0f)) - pinSize / 2,
-                               pc->isInput ? 0 : (getHeight() - pinSize),
-                               pinSize, pinSize);
+                        channelIdx =
+                            processor->getOffsetInBusBufferForAbsoluteChannelIndex (isInput, pc->index, busIdx);
+
+                        const int total = isInput ? numIns : numOuts;
+                        const int index = pc->index == FilterGraph::midiChannelNumber ? (total - 1) : pc->index;
+
+                        const float totalSpaces = static_cast<float> (total) + (static_cast<float> (jmax (0, processor->getBusCount (isInput) - 1)) * 0.5f);
+                        const float indexPos = static_cast<float> (index) + (static_cast<float> (busIdx) * 0.5f);
+
+                        pc->setBounds (proportionOfWidth ((1.0f + indexPos) / (totalSpaces + 1.0f)) - pinSize / 2,
+                                       pc->isInput ? 0 : (getHeight() - pinSize),
+                                       pinSize, pinSize);
+                    }
+                }
             }
         }
     }
@@ -490,11 +1151,11 @@ public:
             return;
         }
 
-        numIns = f->getProcessor()->getMainBusNumInputChannels();
+        numIns = f->getProcessor()->getTotalNumInputChannels();
         if (f->getProcessor()->acceptsMidi())
             ++numIns;
 
-        numOuts = f->getProcessor()->getMainBusNumOutputChannels();
+        numOuts = f->getProcessor()->getTotalNumOutputChannels();
         if (f->getProcessor()->producesMidi())
             ++numOuts;
 
@@ -525,13 +1186,13 @@ public:
             deleteAllChildren();
 
             int i;
-            for (i = 0; i < f->getProcessor()->getMainBusNumInputChannels(); ++i)
+            for (i = 0; i < f->getProcessor()->getTotalNumInputChannels(); ++i)
                 addAndMakeVisible (new PinComponent (graph, filterID, i, true));
 
             if (f->getProcessor()->acceptsMidi())
                 addAndMakeVisible (new PinComponent (graph, filterID, FilterGraph::midiChannelNumber, true));
 
-            for (i = 0; i < f->getProcessor()->getMainBusNumOutputChannels(); ++i)
+            for (i = 0; i < f->getProcessor()->getTotalNumOutputChannels(); ++i)
                 addAndMakeVisible (new PinComponent (graph, filterID, i, false));
 
             if (f->getProcessor()->producesMidi())

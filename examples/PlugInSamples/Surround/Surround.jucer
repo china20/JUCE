@@ -2,7 +2,7 @@
 
 <JUCERPROJECT id="S8q71q" name="Surround" projectType="audioplug" version="1.0.0"
               bundleIdentifier="com.ROLI.Surround" includeBinaryInAppConfig="1"
-              buildVST="1" buildVST3="1" buildAU="1" buildRTAS="0" buildAAX="1"
+              buildVST="1" buildVST3="1" buildAU="1" buildRTAS="0" buildAAX="0"
               pluginName="Surround" pluginDesc="Surround" pluginManufacturer="ROLI Ltd."
               pluginManufacturerCode="ROLI" pluginCode="Srrd" pluginChannelConfigs=""
               pluginIsSynth="0" pluginWantsMidiIn="0" pluginProducesMidiOut="0"

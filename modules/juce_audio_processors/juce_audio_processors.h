@@ -93,6 +93,10 @@
  #define JUCE_SUPPORT_CARBON 1
 #endif
 
+#ifndef JUCE_SUPPORT_LEGACY_AUDIOPROCESSOR
+ #define JUCE_SUPPORT_LEGACY_AUDIOPROCESSOR 1
+#endif
+
 //==============================================================================
 //==============================================================================
 namespace juce

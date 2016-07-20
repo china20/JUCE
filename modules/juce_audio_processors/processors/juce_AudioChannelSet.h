@@ -115,6 +115,12 @@ public:
         For example, numChannels = 1 will return mono, numChannels = 2 will return stereo, etc. */
     static AudioChannelSet canonicalChannelSet (int numChannels);
 
+    /** Create a channel set for a given number of channels which is non-discrete.
+        If numChannels is larger than the number of channels of the surround format
+        with the maximum amount of channels (currently 7.1 Surround), then this
+        function returns an empty set.*/
+    static AudioChannelSet namedChannelSet (int numChannels);
+
     //==============================================================================
     /** Represents different audio channel types. */
     enum ChannelType
@@ -163,6 +169,11 @@ public:
     static String getAbbreviatedChannelTypeName (ChannelType);
 
     //==============================================================================
+    enum
+    {
+        maxChannelsOfNamedLayout = 8
+    };
+
     /** Adds a channel to the set. */
     void addChannel (ChannelType newChannelType);
 

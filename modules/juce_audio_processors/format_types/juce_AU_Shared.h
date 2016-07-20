@@ -343,13 +343,13 @@ struct AudioUnitHelpers
     class ChannelRemapper
     {
     public:
-        ChannelRemapper (PluginBusUtilities& bUtils) : busUtils (bUtils), inputLayoutMap (nullptr), outputLayoutMap (nullptr) {}
+        ChannelRemapper (AudioProcessor& p) : processor (p), inputLayoutMap (nullptr), outputLayoutMap (nullptr) {}
         ~ChannelRemapper() {}
 
         void alloc()
         {
-            const int numInputBuses  = busUtils.getBusCount (true);
-            const int numOutputBuses = busUtils.getBusCount (false);
+            const int numInputBuses  = processor.getBusCount (true);
+            const int numOutputBuses = processor.getBusCount (false);
 
             initializeChannelMapArray (true, numInputBuses);
             initializeChannelMapArray (false, numOutputBuses);
@@ -374,7 +374,7 @@ struct AudioUnitHelpers
 
     private:
         //==============================================================================
-        PluginBusUtilities& busUtils;
+        AudioProcessor& processor;
         HeapBlock<int*> inputLayoutMapPtrStorage, outputLayoutMapPtrStorage;
         HeapBlock<int>  inputLayoutMapStorage, outputLayoutMapStorage;
         int** inputLayoutMap;
@@ -387,8 +387,8 @@ struct AudioUnitHelpers
             HeapBlock<int>& layoutMapStorage = isInput ? inputLayoutMapStorage : outputLayoutMapStorage;
             int**& layoutMap = isInput ? inputLayoutMap : outputLayoutMap;
 
-            const int totalInChannels  = busUtils.findTotalNumChannels (true);
-            const int totalOutChannels = busUtils.findTotalNumChannels (false);
+            const int totalInChannels  = processor.getTotalNumInputChannels ();
+            const int totalOutChannels = processor.getTotalNumOutputChannels();
 
             layoutMapPtrStorage.calloc (static_cast<size_t> (numBuses));
             layoutMapStorage.calloc (static_cast<size_t> (isInput ? totalInChannels : totalOutChannels));
@@ -399,14 +399,14 @@ struct AudioUnitHelpers
             for (int busIdx = 0; busIdx < numBuses; ++busIdx)
             {
                 layoutMap[busIdx] = layoutMapStorage.getData() + ch;
-                ch += busUtils.getNumChannels (isInput, busIdx);
+                ch += processor.getChannelCountOfBus (isInput, busIdx);
             }
         }
 
         void fillLayoutChannelMaps (bool isInput, int busNr)
         {
             int* layoutMap = (isInput ? inputLayoutMap : outputLayoutMap)[busNr];
-            const AudioChannelSet& channelFormat = busUtils.getChannelSet (isInput, busNr);
+            const AudioChannelSet& channelFormat = processor.getChannelLayoutOfBus (isInput, busNr);
             const int numChannels = channelFormat.size();
 
             for (int i = 0; i < numChannels; ++i)
@@ -604,16 +604,39 @@ struct AudioUnitHelpers
         }
     }
 
-    static Array<AUChannelInfo> getAUChannelInfo (PluginBusUtilities& busUtils)
+    template <int numLayouts>
+    static bool isLayoutSupported (const AudioProcessor& processor,
+                                   bool isInput, int busIdx,
+                                   int numChannels,
+                                   const short (&channelLayoutList) [numLayouts][2],
+                                   bool hasLayoutMap = true)
+    {
+        if (const AudioProcessor::AudioProcessorBus* bus = processor.getBus (isInput, busIdx))
+        {
+            if (! bus->isNumberOfChannelsSupported (numChannels))
+                return false;
+
+            if (! hasLayoutMap)
+                return true;
+
+            const int numConfigs = sizeof (channelLayoutList) / sizeof (short[2]);
+
+            for (int i = 0; i < numConfigs; ++i)
+            {
+                if (channelLayoutList[i][isInput ? 0 : 1] == numChannels)
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    static Array<AUChannelInfo> getAUChannelInfo (const AudioProcessor& processor)
     {
         Array<AUChannelInfo> channelInfo;
 
-        AudioProcessor* juceFilter = &busUtils.processor;
-        const AudioProcessor::AudioBusArrangement& arr = juceFilter->busArrangement;
-        PluginBusUtilities::ScopedBusRestorer restorer (busUtils);
-
-        const bool hasMainInputBus  = (busUtils.getNumEnabledBuses (true)  > 0);
-        const bool hasMainOutputBus = (busUtils.getNumEnabledBuses (false) > 0);
+        const bool hasMainInputBus  = (processor.getBusCount (true)  > 0);
+        const bool hasMainOutputBus = (processor.getBusCount (false) > 0);
 
         if ((! hasMainInputBus)  && (! hasMainOutputBus))
         {
@@ -629,8 +652,8 @@ struct AudioUnitHelpers
         {
             const uint32_t maxNumChanToCheckFor = 9;
 
-            uint32_t defaultInputs  = static_cast<uint32_t> (busUtils.getNumChannels (true,  0));
-            uint32_t defaultOutputs = static_cast<uint32_t> (busUtils.getNumChannels (false, 0));
+            uint32_t defaultInputs  = static_cast<uint32_t> (processor.getChannelCountOfBus (true,  0));
+            uint32_t defaultOutputs = static_cast<uint32_t> (processor.getChannelCountOfBus (false, 0));
 
             uint32_t lastInputs  = defaultInputs;
             uint32_t lastOutputs = defaultOutputs;
@@ -643,43 +666,41 @@ struct AudioUnitHelpers
 
             for (uint32_t inChanNum = hasMainInputBus ? 1 : 0; inChanNum <= (hasMainInputBus ? maxNumChanToCheckFor : 0); ++inChanNum)
             {
-                const AudioChannelSet dfltInLayout = busUtils.getDefaultLayoutForChannelNumAndBus(true, 0, static_cast<int> (inChanNum));
+                const AudioProcessor::AudioProcessorBus* inBus = processor.getBus (true, 0);
 
-                if (inChanNum != 0 && dfltInLayout.isDisabled())
+                if (inBus != nullptr && (! inBus->isNumberOfChannelsSupported ((int) inChanNum)))
                     continue;
 
                 for (uint32_t outChanNum = hasMainOutputBus ? 1 : 0; outChanNum <= (hasMainOutputBus ? maxNumChanToCheckFor : 0); ++outChanNum)
                 {
-                    const AudioChannelSet dfltOutLayout = busUtils.getDefaultLayoutForChannelNumAndBus(false, 0, static_cast<int> (outChanNum));
-                    if (outChanNum != 0 && dfltOutLayout.isDisabled())
-                        continue;
+                    const AudioProcessor::AudioProcessorBus* outBus = processor.getBus (false, 0);
 
-                    // get the number of channels again. This is only needed for some processors that change their configuration
-                    // even when they indicate that setPreferredBusArrangement failed.
-                    lastInputs  = hasMainInputBus  ? static_cast<uint32_t> (arr.inputBuses. getReference (0). channels.size()) : 0;
-                    lastOutputs = hasMainOutputBus ? static_cast<uint32_t> (arr.outputBuses.getReference (0). channels.size()) : 0;
+                    if (outBus != nullptr && (! outBus->isNumberOfChannelsSupported ((int) outChanNum)))
+                        continue;
 
                     uint32_t channelConfiguration = (inChanNum << 16) | outChanNum;
 
                     // did we already try this configuration?
                     if (supportedChannels.contains (channelConfiguration)) continue;
 
-                    if (lastInputs != inChanNum && (! dfltInLayout.isDisabled()))
+                    if (lastInputs != inChanNum && (inChanNum > 0 && inBus != nullptr))
                     {
-                        if (! juceFilter->setPreferredBusArrangement (true, 0, dfltInLayout)) continue;
+                        AudioChannelSet set = inBus->supportedLayoutWithChannels ((int) inChanNum);
+                        AudioProcessor::AudioBusLayouts layouts = inBus->getBusLayoutsForLayoutChangeOfBus (set);
 
                         lastInputs = inChanNum;
-                        lastOutputs = hasMainOutputBus ? static_cast<uint32_t> (arr.outputBuses.getReference (0). channels.size()) : 0;
+                        lastOutputs = hasMainOutputBus ? static_cast<uint32_t> (layouts.outputBuses.getReference (0).size()) : 0;
 
                         supportedChannels.add ((lastInputs << 16) | lastOutputs);
                     }
 
-                    if (lastOutputs != outChanNum && (! dfltOutLayout.isDisabled()))
+                    if (lastOutputs != outChanNum && (outChanNum > 0 && outBus != nullptr))
                     {
-                        if (! juceFilter->setPreferredBusArrangement (false, 0, dfltOutLayout)) continue;
+                        AudioChannelSet set = outBus->supportedLayoutWithChannels ((int) outChanNum);
+                        AudioProcessor::AudioBusLayouts layouts = outBus->getBusLayoutsForLayoutChangeOfBus (set);
 
-                        lastInputs = hasMainInputBus ? static_cast<uint32_t> (arr.inputBuses.getReference (0).channels.size()) : 0;
                         lastOutputs = outChanNum;
+                        lastInputs = hasMainInputBus ? static_cast<uint32_t> (layouts.inputBuses.getReference (0).size()) : 0;
 
                         supportedChannels.add ((lastInputs << 16) | lastOutputs);
                     }
