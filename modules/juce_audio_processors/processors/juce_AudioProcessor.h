@@ -57,15 +57,15 @@ protected:
 
     /** Constructor for multibus AudioProcessors
 
-     If your AudioProcessor supports multiple buses than use this constructor
-     to initialise the bus layouts and bus names of your plug-in.
-     */
+        If your AudioProcessor supports multiple buses than use this constructor
+        to initialise the bus layouts and bus names of your plug-in.
+    */
     AudioProcessor (const AudioIOProperties& ioLayouts);
 
     /** Constructor for AudioProcessors which use layout maps
 
-     If your AudioProcessor uses layout maps then use this constructor.
-     */
+        If your AudioProcessor uses layout maps then use this constructor.
+    */
    #if JUCE_COMPILER_SUPPORTS_INITIALIZER_LISTS
     AudioProcessor (const std::initializer_list<const short[2]>& channelLayoutList)
     {
@@ -250,6 +250,7 @@ public:
                                MidiBuffer& midiMessages);
 
     /** Renders the next block when the processor is being bypassed.
+
         The default implementation of this method will pass-through any incoming audio, but
         you may override this method e.g. to add latency compensation to the data to match
         the processor's latency characteristics. This will avoid situations where bypassing
@@ -261,6 +262,7 @@ public:
                                        MidiBuffer& midiMessages);
 
     /** Renders the next block when the processor is being bypassed.
+
         The default implementation of this method will pass-through any incoming audio, but
         you may override this method e.g. to add latency compensation to the data to match
         the processor's latency characteristics. This will avoid situations where bypassing
@@ -490,8 +492,7 @@ public:
          this callback if you want to support dynamically adding/removing buses by
          the host. This is useful for mixer audio processors.
 
-         The default implementation will allow you to add a main bus if no buses
-         have been added.
+         The default implementation will always return false.
 
          @see addBus
      */
@@ -506,7 +507,7 @@ public:
          If you return true in this callback then the AudioProcessor will go ahead
          and delete the bus.
 
-         The default implementation will always return false;
+         The default implementation will always return false.
      */
     virtual bool canRemoveBus (bool /*inputBus*/) const     { return false; }
 
@@ -515,14 +516,14 @@ public:
         Request an additional bus from the audio processor. If the audio processor
         does not support adding additional buses then this method will return false.
 
-        Most audio processors will not allow you to add dynamically add/remove
+        Most audio processors will not allow you to dynamically add/remove
         audio buses and will return false.
 
-        This method will invoke the canAddBus callback to probe if a bus can
-        be added and, if yes, will use the supplied bus properties of the
-        canAddBus callback to create a new bus.
+        This method will invoke the canApplyBusCountChange callback to probe
+        if a bus can be added and, if yes, will use the supplied bus properties
+        of the canApplyBusCountChange callback to create a new bus.
 
-        @see canAddBus, removeBus
+        @see canApplyBusCountChange, removeBus
     */
     bool addBus (bool isInput);
 
@@ -532,13 +533,13 @@ public:
         audio processor does not support removing buses then this method will
         return false.
 
-        Most audio processors will not allow you to add dynamically add/remove
+        Most audio processors will not allow you to dynamically add/remove
         audio buses and will return false.
 
         The default implementation will return false.
 
-        This method will invoke the canRemoveBus callback to probe if a bus can
-        currently be removed and, if yes, will go ahead and remove it.
+        This method will invoke the canApplyBusCountChange callback to probe if
+        a bus can currently be removed and, if yes, will go ahead and remove it.
 
         @see addBus, canRemoveBus
      */
@@ -552,7 +553,7 @@ public:
         and getNextBestLayout methods to probe which layouts this audio
         processor supports.
      */
-    virtual bool setBusLayouts (const AudioBusLayouts& arr);
+    bool setBusLayouts (const AudioBusLayouts& arr);
 
     /** Set the channel layouts of this audio processor without changing the
         enablement state of the buses.
