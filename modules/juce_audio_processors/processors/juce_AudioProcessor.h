@@ -392,7 +392,7 @@ public:
         bool setCurrentLayoutWithoutEnabling (const AudioChannelSet& layout);
 
         /** Return the number of channels of the current bus. */
-        int getNumberOfChannels() const noexcept                    { return getCurrentLayout().size(); }
+        inline int getNumberOfChannels() const noexcept                    { return cachedChannelCount; }
 
         /** Set the number of channles of this bus. This will return false if the AudioProcessor
             does not support this layout. */
@@ -462,11 +462,13 @@ public:
         friend class AudioProcessor;
         AudioProcessorBus (AudioProcessor&, const String&, const AudioChannelSet&, bool);
         void busDirAndIndex (bool&, int&) const noexcept;
+        void updateChannelCount() noexcept;
 
         AudioProcessor& owner;
         String name;
         AudioChannelSet layout, dfltLayout, lastLayout;
         bool enabledByDefault;
+        int cachedChannelCount;
     };
 
     //==============================================================================
@@ -586,7 +588,13 @@ public:
 
         If the index, direction combination is invalid then this will return zero.
      */
-    int getChannelCountOfBus (bool isInput, int busIdx) const noexcept    { return getChannelLayoutOfBus (isInput, busIdx).size(); }
+    inline int getChannelCountOfBus (bool isInput, int busIdx) const noexcept
+    {
+        if (const AudioProcessorBus* bus = getBus (isInput, busIdx))
+            return bus->getNumberOfChannels();
+
+        return 0;
+    }
 
     /** Enables all buses */
     bool enableAllBuses();
@@ -748,7 +756,7 @@ public:
         getMainBusNumInputChannels if your processor does not have any sidechains
         or aux buses.
      */
-    int getTotalNumInputChannels()  const noexcept;
+    int getTotalNumInputChannels()  const noexcept           { return cachedTotalIns; }
 
     /** Returns the total number of output channels.
 
@@ -762,13 +770,13 @@ public:
         getMainBusNumOutputChannels if your processor does not have any sidechains
         or aux buses.
      */
-    int getTotalNumOutputChannels() const noexcept;
+    int getTotalNumOutputChannels() const noexcept           { return cachedTotalOuts; }
 
     /** Returns the number of input channels on the main bus. */
-    int getMainBusNumInputChannels()   const noexcept { return getChannelCountOfBus (true,  0); }
+    inline int getMainBusNumInputChannels()   const noexcept { return getChannelCountOfBus (true,  0); }
 
     /** Returns the number of output channels on the main bus. */
-    int getMainBusNumOutputChannels()  const noexcept { return getChannelCountOfBus (false, 0); }
+    inline int getMainBusNumOutputChannels()  const noexcept { return getChannelCountOfBus (false, 0); }
 
     //==============================================================================
     /** Returns true if the channel layout map contains a certain layout.
@@ -1566,6 +1574,8 @@ private:
     String cachedInputSpeakerArrString;
     String cachedOutputSpeakerArrString;
 
+    int cachedTotalIns, cachedTotalOuts;
+
     OwnedArray<AudioProcessorParameter> managedParameters;
     AudioProcessorParameter* getParamChecked (int) const noexcept;
 
@@ -1577,7 +1587,7 @@ private:
     bool disableNonMainBuses ();
     void updateSpeakerFormatStrings();
     bool applyBusLayouts (const AudioBusLayouts& arr);
-    void callIOChangedCallbacks (bool busNumberChanged = false);
+    void audioIOChanged (bool busNumberChanged, bool channelNumChanged);
 
     template <typename floatType>
     void processBypassed (AudioBuffer<floatType>&, MidiBuffer&);

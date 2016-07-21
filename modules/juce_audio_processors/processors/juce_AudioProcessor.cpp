@@ -42,6 +42,9 @@ AudioProcessor::AudioProcessor(const AudioIOProperties& ioConfig)
 
 void AudioProcessor::initialise (const AudioIOProperties& ioConfig)
 {
+    cachedTotalIns  = 0;
+    cachedTotalOuts = 0;
+
     wrapperType = wrapperTypeBeingCreated.get();
     playHead = nullptr;
     currentSampleRate = 0;
@@ -113,14 +116,7 @@ bool AudioProcessor::removeBus (bool inputBus)
     const int numChannels = getChannelCountOfBus (inputBus, busIdx);
     (inputBus ? inputBuses : outputBuses).remove (busIdx);
 
-    numBusesChanged();
-
-    if (numChannels > 0)
-    {
-        updateSpeakerFormatStrings();
-        processorLayoutsChanged();
-        numChannelsChanged();
-    }
+    audioIOChanged (true, numChannels > 0);
 
     return true;
 }
@@ -412,11 +408,8 @@ static int countTotalChannels (const OwnedArray<AudioProcessor::AudioProcessorBu
     return n;
 }
 
-int AudioProcessor::getTotalNumInputChannels() const noexcept   { return countTotalChannels (inputBuses); }
-int AudioProcessor::getTotalNumOutputChannels() const noexcept  { return countTotalChannels (outputBuses); }
-
 void AudioProcessor::numChannelsChanged()      {}
-void AudioProcessor::numBusesChanged()        {}
+void AudioProcessor::numBusesChanged()         {}
 void AudioProcessor::processorLayoutsChanged() {}
 
 int AudioProcessor::getChannelIndexInProcessBlockBuffer (bool isInput, int busIndex, int channelIndex) const noexcept
@@ -744,14 +737,7 @@ void AudioProcessor::createBus (bool inputBus, const AudioBusProperties& ioConfi
 {
     (inputBus ? inputBuses : outputBuses).add (new AudioProcessorBus (*this, ioConfig.busName, ioConfig.defaultLayout, ioConfig.isActivatedByDefault));
 
-    numBusesChanged();
-
-    if (ioConfig.isActivatedByDefault)
-    {
-        updateSpeakerFormatStrings();
-        processorLayoutsChanged();
-        numChannelsChanged();
-    }
+    audioIOChanged (true, ioConfig.isActivatedByDefault);
 }
 
 //==============================================================================
@@ -928,15 +914,41 @@ bool AudioProcessor::applyBusLayouts (const AudioBusLayouts& layouts)
             bus.lastLayout = set;
     }
 
-    processorLayoutsChanged();
-
-    if (oldNumberOfIns != getTotalNumInputChannels() || oldNumberOfOuts != getTotalNumOutputChannels())
-    {
-        updateSpeakerFormatStrings();
-        numChannelsChanged();
-    }
+    const bool channelNumChanged = (oldNumberOfIns != getTotalNumInputChannels() || oldNumberOfOuts != getTotalNumOutputChannels());
+    audioIOChanged (false, channelNumChanged);
 
     return true;
+}
+
+void AudioProcessor::audioIOChanged (bool busNumberChanged, bool channelNumChanged)
+{
+    const int numInputBuses  = getBusCount (true);
+    const int numOutputBuses = getBusCount (false);
+
+    for (int dir = 0; dir < 2; ++dir)
+    {
+        const bool isInput = (dir == 0);
+        const int n = (isInput ? numInputBuses : numOutputBuses);
+
+        for (int i = 0; i < n; ++i)
+        {
+            if (AudioProcessorBus* bus = getBus (isInput, i))
+                bus->updateChannelCount();
+        }
+    }
+
+    cachedTotalIns  = countTotalChannels (inputBuses);
+    cachedTotalOuts = countTotalChannels (outputBuses);
+
+    updateSpeakerFormatStrings();
+
+    if (busNumberChanged)
+        numBusesChanged();
+
+    if (channelNumChanged)
+        numChannelsChanged();
+
+    processorLayoutsChanged();
 }
 
 //==============================================================================
@@ -1197,6 +1209,11 @@ int AudioProcessor::AudioProcessorBus::getChannelIndexInProcessBlockBuffer (int 
     busDirAndIndex (isInputBus, busIdx);
 
     return owner.getChannelIndexInProcessBlockBuffer (isInputBus, busIdx, channelIndex);
+}
+
+void AudioProcessor::AudioProcessorBus::updateChannelCount() noexcept
+{
+    cachedChannelCount = layout.size();
 }
 
 //==============================================================================
