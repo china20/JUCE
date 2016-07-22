@@ -179,7 +179,7 @@ public:
 
         addAndMakeVisible (applyButton);
 
-        currentLayout = p->getBusLayouts();
+        currentLayout = p->getAudioBusesLayouts();
 
         if (inConfig != nullptr)
             inConfig->updateBusConfig (currentLayout.inputBuses);
@@ -239,10 +239,10 @@ public:
 
         if (AudioProcessor* p = getAudioProcessor())
         {
-            if (currentLayout != p->getBusLayouts())
+            if (currentLayout != p->getAudioBusesLayouts())
             {
                 suspend();
-                wasSuccesful = p->setBusLayouts (currentLayout);
+                wasSuccesful = p->setAudioBusesLayouts (currentLayout);
                 resume();
             }
 
@@ -255,7 +255,7 @@ public:
 
     void updateConfig (const AudioChannelSet& set, bool isInput, int busIdx)
     {
-        AudioProcessor::AudioBusLayouts newLayout = currentLayout;
+        AudioProcessor::AudioBusesLayouts newLayout = currentLayout;
         newLayout.getChannelSet (isInput, busIdx) = set;
 
         if (currentLayout != newLayout)
@@ -283,7 +283,7 @@ public:
 
             if (wasSuccesful)
             {
-                currentLayout = p->getBusLayouts();
+                currentLayout = p->getAudioBusesLayouts();
 
                 if (inConfig != nullptr)
                     inConfig->updateBusConfig (currentLayout.inputBuses);
@@ -313,7 +313,7 @@ public:
 
             if (wasSuccesful)
             {
-                currentLayout = p->getBusLayouts();
+                currentLayout = p->getAudioBusesLayouts();
 
                 if (inConfig != nullptr)
                     inConfig->updateBusConfig (currentLayout.inputBuses);
@@ -777,7 +777,7 @@ private:
     };
 
     //==============================================================================
-    AudioProcessor::AudioBusLayouts currentLayout;
+    AudioProcessor::AudioBusesLayouts currentLayout;
     Label title;
     ScopedPointer<InputOutputConfig> inConfig, outConfig;
     TextButton applyButton;
