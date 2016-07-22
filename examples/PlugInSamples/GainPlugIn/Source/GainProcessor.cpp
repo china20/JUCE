@@ -80,7 +80,7 @@ public:
     }
 
     //==============================================================================
-    bool isBusLayoutSupported (const AudioBusLayouts& layouts) const override
+    bool isAudioBusesLayoutSupported (const AudioBusesLayouts& layouts) const override
     {
         const AudioChannelSet& mainInLayout  = layouts.getChannelSet (true,  0);
         const AudioChannelSet& mainOutLayout = layouts.getChannelSet (false, 0);

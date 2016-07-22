@@ -1744,7 +1744,7 @@ private:
         const int numInputElements  = static_cast<int> (GetScope(kAudioUnitScope_Input). GetNumberOfElements());
         const int numOutputElements = static_cast<int> (GetScope(kAudioUnitScope_Output).GetNumberOfElements());
 
-        AudioProcessor::AudioBusLayouts requestedLayouts;
+        AudioProcessor::AudioBusesLayouts requestedLayouts;
         for (int dir = 0; dir < 2; ++dir)
         {
             const bool isInput = (dir == 0);
@@ -1767,7 +1767,7 @@ private:
             }
         }
 
-        if (! juceFilter->setBusLayouts (requestedLayouts))
+        if (! juceFilter->setAudioBusesLayouts (requestedLayouts))
             return kAudioUnitErr_FormatNotSupported;
 
         // update total channel count

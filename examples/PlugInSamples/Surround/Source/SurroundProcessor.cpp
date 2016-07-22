@@ -95,7 +95,7 @@ public:
     bool hasEditor() const override               { return true;   }
 
     //==============================================================================
-    bool isBusLayoutSupported (const AudioBusLayouts& layouts) const override
+    bool isAudioBusesLayoutSupported (const AudioBusesLayouts& layouts) const override
     {
         return ((! layouts.getMainInputChannelSet() .isDiscreteLayout())
              && (! layouts.getMainOutputChannelSet().isDiscreteLayout())
