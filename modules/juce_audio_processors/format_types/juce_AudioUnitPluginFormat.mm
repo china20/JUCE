@@ -439,9 +439,9 @@ public:
     }
 
     //==============================================================================
-    bool isAudioBusesLayoutSupported (const AudioBusesLayouts& layouts) const override
+    bool isAudioBusesLayoutSupported (const AudioBusesLayout& layouts) const override
     {
-        if (layouts == getAudioBusesLayouts())
+        if (layouts == getAudioBusesLayout())
             return true;
 
         for (int dir = 0; dir < 2; ++dir)
@@ -507,7 +507,7 @@ public:
         return true;
     }
 
-    bool syncBusLayouts (const AudioBusesLayouts& layouts, bool isInitialized, bool& layoutHasChanged) const
+    bool syncBusLayouts (const AudioBusesLayout& layouts, bool isInitialized, bool& layoutHasChanged) const
     {
         layoutHasChanged = false;
 
@@ -613,9 +613,9 @@ public:
         return true;
     }
 
-    bool canApplyBusesLayouts (const AudioBusesLayouts& layouts) const override
+    bool canApplyBusesLayout (const AudioBusesLayout& layouts) const override
     {
-        // You cannot call setAudioBusesLayouts when the AudioProcessor is processing.
+        // You cannot call setAudioBusesLayout when the AudioProcessor is processing.
         // Call releaseResources first!
         jassert (! prepared);
 
@@ -637,7 +637,7 @@ public:
 
             if (! success)
                 // make sure that the layout is back to it's original state
-                syncBusLayouts (getAudioBusesLayouts(), false, layoutHasChanged);
+                syncBusLayouts (getAudioBusesLayout(), false, layoutHasChanged);
 
             return success;
         }
@@ -774,14 +774,14 @@ public:
         {
             bool ignore;
 
-            if (! syncBusLayouts (getAudioBusesLayouts(), false, ignore))
+            if (! syncBusLayouts (getAudioBusesLayout(), false, ignore))
                 return false;
 
             prepared = (AudioUnitInitialize (audioUnit) == noErr);
 
             if (prepared)
             {
-                if (! syncBusLayouts (getAudioBusesLayouts(), true, ignore))
+                if (! syncBusLayouts (getAudioBusesLayout(), true, ignore))
                 {
                     prepared = false;
                     AudioUnitUninitialize (audioUnit);

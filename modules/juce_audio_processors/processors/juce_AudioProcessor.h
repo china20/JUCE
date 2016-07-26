@@ -278,7 +278,7 @@ public:
     /**
         Represents the bus layout state of a plug-in
     */
-    struct AudioBusesLayouts
+    struct AudioBusesLayout
     {
         /** An array containing the list of input buses that this processor supports. */
         Array<AudioChannelSet> inputBuses;
@@ -325,8 +325,8 @@ public:
         /** Get the number of output channels on the main bus. */
         int getMainOutputChannels() const noexcept               { return getNumChannels (false, 0); }
 
-        bool operator== (const AudioBusesLayouts& other) const noexcept   { return inputBuses == other.inputBuses && outputBuses == other.outputBuses; }
-        bool operator!= (const AudioBusesLayouts& other) const noexcept   { return inputBuses != other.inputBuses || outputBuses != other.outputBuses; }
+        bool operator== (const AudioBusesLayout& other) const noexcept   { return inputBuses == other.inputBuses && outputBuses == other.outputBuses; }
+        bool operator!= (const AudioBusesLayout& other) const noexcept   { return inputBuses != other.inputBuses || outputBuses != other.outputBuses; }
     };
 
     //==============================================================================
@@ -425,7 +425,7 @@ public:
             is no way to support the given layout then this method will return the next best
             layout.
         */
-        AudioBusesLayouts getAudioBusesLayoutsForLayoutChangeOfBus (const AudioChannelSet& set) const;
+        AudioBusesLayout getAudioBusesLayoutForLayoutChangeOfBus (const AudioChannelSet& set) const;
 
         //==============================================================================
         /** Returns true if the current bus is enabled. */
@@ -551,24 +551,24 @@ public:
     /** Set the channel layouts of this audio processor.
 
         If the layout is not supported by this audio processor then
-        this method will return false. You can use the checkAudioBusesLayoutsSupported
+        this method will return false. You can use the checkAudioBusesLayoutSupported
         and getNextBestLayout methods to probe which layouts this audio
         processor supports.
      */
-    bool setAudioBusesLayouts (const AudioBusesLayouts& arr);
+    bool setAudioBusesLayout (const AudioBusesLayout& arr);
 
     /** Set the channel layouts of this audio processor without changing the
         enablement state of the buses.
 
         If the layout is not supported by this audio processor then
-        this method will return false. You can use the checkAudioBusesLayoutsSupported
+        this method will return false. You can use the checkAudioBusesLayoutSupported
         and getNextBestLayout methods to probe which layouts this audio
         processor supports.
     */
-    bool setAudioBusesLayoutsWithoutEnabling (const AudioBusesLayouts& arr);
+    bool setAudioBusesLayoutWithoutEnabling (const AudioBusesLayout& arr);
 
     /** Provides the current channel layouts of this audio processor. */
-    AudioBusesLayouts getAudioBusesLayouts() const;
+    AudioBusesLayout getAudioBusesLayout() const;
 
     /** Provides the channel layout of the bus with a given index and direction.
 
@@ -632,14 +632,14 @@ public:
     /** Returns true if the Audio processor is likely to support a given layout.
 
         This can be called regardless if the processor is currently runni*/
-    bool checkAudioBusesLayoutsSupported (const AudioBusesLayouts& layouts) const;
+    bool checkAudioBusesLayoutSupported (const AudioBusesLayout& layouts) const;
 
     /** Returns the best supported alternative for a layout which is potentially not
         supported by the audio processor.
 
         This method is useful if you require a particular layout on a subset of the
         AudioProcessor's buses. You can use this mehtod to obtain a layout which
-        is supported by the AudioProcessor without needing to call checkAudioBusesLayoutsSupported
+        is supported by the AudioProcessor without needing to call checkAudioBusesLayoutSupported
         on all possible combinations to figure out which one is supported by the
         audio processor.
 
@@ -647,23 +647,23 @@ public:
         to stereo could use this code:
 
         @code
-        AudioChannelLayout withStereoIn = processor.getAudioBusesLayouts();
+        AudioChannelLayout withStereoIn = processor.getAudioBusesLayout();
         withStereoIn.inputBuses.getReference (0) = AudioChannelSet::stereo();
 
-        processor.setAudioBusesLayouts (withStereoIn);
+        processor.setAudioBusesLayout (withStereoIn);
         @endcode
 
         However, the above may fail even if the audio processor supports stereo on
         the input bus. This is the case, for example, if the audio processor requires
         the number of channels on the main input and output bus to be the same, and
         the audio processor had a single channel on the input and output before the
-        above code was executed. In this case, the setAudioBusesLayouts method is called
+        above code was executed. In this case, the setAudioBusesLayout method is called
         with a stereo input but a mono output - a layout which is not supported by
         the audio processor. To avoid this, the last line in the above code can
         be modified in the following way:
 
         @code
-        processor.setAudioBusesLayouts (getNextBestLayout (withStereoIn));
+        processor.setAudioBusesLayout (getNextBestLayout (withStereoIn));
         @endcode
 
         Alternatively, you can also call setChannelLayoutOfBus which will internally
@@ -679,14 +679,14 @@ public:
         layout without altering it.
 
         The default implementation will simply return the given layout if
-        checkAudioBusesLayoutsSupported returns true. Otherwise, it will try to match
+        checkAudioBusesLayoutSupported returns true. Otherwise, it will try to match
         input and output layouts. If this also fails then the method will
         return the current or default layout - whichever is closer to the
         requested layout.
 
-        @see AudioProcessorBus::setCurrentLayout, setAudioBusesLayouts
+        @see AudioProcessorBus::setCurrentLayout, setAudioBusesLayout
     */
-    virtual AudioBusesLayouts getNextBestLayout (const AudioBusesLayouts& layouts) const;
+    virtual AudioBusesLayout getNextBestLayout (const AudioBusesLayout& layouts) const;
 
     //==============================================================================
     /** Returns true if the Audio processor supports double precision floating point processing.
@@ -781,24 +781,24 @@ public:
     //==============================================================================
     /** Returns true if the channel layout map contains a certain layout.
 
-        You can use this method to help you implement the checkAudioBusesLayoutsSupported
+        You can use this method to help you implement the checkAudioBusesLayoutSupported
         method. For example
 
         @code
-        bool checkAudioBusesLayoutsSupported (const AudioBusesLayouts& layouts) override
+        bool checkAudioBusesLayoutSupported (const AudioBusesLayout& layouts) override
         {
             return containsLayout (layouts, {{1,1},{2,2}});
         }
         @endcode
     */
    #if JUCE_COMPILER_SUPPORTS_INITIALIZER_LISTS
-    static bool containsLayout (const AudioBusesLayouts& layouts, const std::initializer_list<const short[2]>& channelLayoutList)
+    static bool containsLayout (const AudioBusesLayout& layouts, const std::initializer_list<const short[2]>& channelLayoutList)
     {
         return containsLayout (layouts, layoutListToArray (channelLayoutList));
     }
    #endif
     template <int numLayouts>
-    static bool containsLayout (const AudioBusesLayouts& layouts, const short (&channelLayoutList) [numLayouts][2])
+    static bool containsLayout (const AudioBusesLayout& layouts, const short (&channelLayoutList) [numLayouts][2])
     {
         return containsLayout (layouts, layoutListToArray (channelLayoutList));
     }
@@ -808,14 +808,14 @@ public:
         You can use this mehtod to help you implement getNextBestLayout. For example:
 
         @code
-        AudioBusesLayouts getNextBestLayout (const AudioBusesLayouts& layouts) override
+        AudioBusesLayout getNextBestLayout (const AudioBusesLayout& layouts) override
         {
             return getNextBestLayoutInLayoutList (layouts, {{1,1},{2,2}});
         }
         @endcode
     */
     template <int numLayouts>
-    AudioBusesLayouts getNextBestLayoutInLayoutList (const AudioBusesLayouts& layouts,
+    AudioBusesLayout getNextBestLayoutInLayoutList (const AudioBusesLayout& layouts,
                                                    const short channelLayoutList[numLayouts][2])
     {
         return getNextBestLayoutInList (layouts, layoutListToArray (channelLayoutList));
@@ -1387,15 +1387,15 @@ protected:
     /** Callback to query if the AudioProcessor supports a specific layout.
 
         This callback is called when the host probes the supported bus layouts via
-        the checkAudioBusesLayoutsSupported method. You should override this callback if you
+        the checkAudioBusesLayoutSupported method. You should override this callback if you
         would like to limit the layouts that your AudioProcessor supports. The default
         implementation will accept any layout. JUCE does basic sanity checks so that
         the provided layouts parameter will have the same number of buses as your
         AudioProcessor.
 
-        @see checkAudioBusesLayoutsSupported
+        @see checkAudioBusesLayoutSupported
     */
-    virtual bool isAudioBusesLayoutSupported (const AudioBusesLayouts& /*layouts*/) const    { return true; }
+    virtual bool isAudioBusesLayoutSupported (const AudioBusesLayout& /*layouts*/) const    { return true; }
 
     /** Callback to check if a certain bus layout can now be applied
 
@@ -1406,7 +1406,7 @@ protected:
         called if processing of the AudioProcessor has been stopped by a previous call to
         releaseResources or after the construction of the AudioProcessor. It will be called
         just before the actual layout change. By returning false you will abort the layout
-        change and setAudioBusesLayouts will return false indicating that the layout change
+        change and setAudioBusesLayout will return false indicating that the layout change
         was not successful.
 
         The default implementation will simply call isAudioBusesLayoutSupported.
@@ -1426,9 +1426,9 @@ protected:
         chance to reject the layout change should an error occur with the underlying plug-in
         during the layout change.
 
-        @see isAudioBusesLayoutSupported, setAudioBusesLayouts
+        @see isAudioBusesLayoutSupported, setAudioBusesLayout
     */
-    virtual bool canApplyBusesLayouts (const AudioBusesLayouts& layouts) const     { return isAudioBusesLayoutSupported (layouts); }
+    virtual bool canApplyBusesLayout (const AudioBusesLayout& layouts) const     { return isAudioBusesLayoutSupported (layouts); }
 
     //==============================================================================
     /** Structure used for AudioProcessor Callbacks */
@@ -1461,7 +1461,7 @@ protected:
     /** Callback to query if adding/removing buses currently possible.
 
         This callback is called when the host calls addBus or removeBus.
-        Similar to canApplyBusesLayouts, this callback is only called while
+        Similar to canApplyBusesLayout, this callback is only called while
         the AudioProcessor is stopped and gives the processor a last
         chance to reject a requested bus change. It can also be used to apply
         the bus count change to an underlying wrapped plug-in.
@@ -1547,9 +1547,9 @@ private:
     static AudioIOProperties busIOFromLayoutArray (const Array<InOutChannelPair>&);
 
     //==============================================================================
-    AudioBusesLayouts getNextBestLayoutInList (const AudioBusesLayouts& layouts,
+    AudioBusesLayout getNextBestLayoutInList (const AudioBusesLayout& layouts,
                                              const Array<InOutChannelPair>& channelLayouts) const;
-    static bool containsLayout (const AudioBusesLayouts& layouts, const Array<InOutChannelPair>& channelLayouts);
+    static bool containsLayout (const AudioBusesLayout& layouts, const Array<InOutChannelPair>& channelLayouts);
 
     //==============================================================================
     void initialise (const AudioIOProperties& ioLayouts);
@@ -1586,7 +1586,7 @@ private:
     AudioProcessorListener* getListenerLocked (int) const noexcept;
     bool disableNonMainBuses ();
     void updateSpeakerFormatStrings();
-    bool applyBusLayouts (const AudioBusesLayouts& arr);
+    bool applyBusLayouts (const AudioBusesLayout& arr);
     void audioIOChanged (bool busNumberChanged, bool channelNumChanged);
 
     template <typename floatType>

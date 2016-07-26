@@ -686,7 +686,7 @@ struct AudioUnitHelpers
                     if (lastInputs != inChanNum && (inChanNum > 0 && inBus != nullptr))
                     {
                         AudioChannelSet set = inBus->supportedLayoutWithChannels ((int) inChanNum);
-                        AudioProcessor::AudioBusesLayouts layouts = inBus->getAudioBusesLayoutsForLayoutChangeOfBus (set);
+                        AudioProcessor::AudioBusesLayout layouts = inBus->getAudioBusesLayoutForLayoutChangeOfBus (set);
 
                         lastInputs = inChanNum;
                         lastOutputs = hasMainOutputBus ? static_cast<uint32_t> (layouts.outputBuses.getReference (0).size()) : 0;
@@ -697,7 +697,7 @@ struct AudioUnitHelpers
                     if (lastOutputs != outChanNum && (outChanNum > 0 && outBus != nullptr))
                     {
                         AudioChannelSet set = outBus->supportedLayoutWithChannels ((int) outChanNum);
-                        AudioProcessor::AudioBusesLayouts layouts = outBus->getAudioBusesLayoutsForLayoutChangeOfBus (set);
+                        AudioProcessor::AudioBusesLayout layouts = outBus->getAudioBusesLayoutForLayoutChangeOfBus (set);
 
                         lastOutputs = outChanNum;
                         lastInputs = hasMainInputBus ? static_cast<uint32_t> (layouts.inputBuses.getReference (0).size()) : 0;

@@ -42,7 +42,7 @@ public:
     ~NoiseGate() {}
 
     //==============================================================================
-    bool isAudioBusesLayoutSupported (const AudioBusesLayouts& layouts) const override
+    bool isAudioBusesLayoutSupported (const AudioBusesLayout& layouts) const override
     {
         // the sidechain can take any layout, the main bus needs to be the same on the input and output
         return (layouts.getMainInputChannelSet() == layouts.getMainOutputChannelSet() &&

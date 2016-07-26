@@ -123,22 +123,22 @@ bool AudioProcessor::removeBus (bool inputBus)
 
 
 //==============================================================================
-bool AudioProcessor::setAudioBusesLayouts (const AudioBusesLayouts& arr)
+bool AudioProcessor::setAudioBusesLayout (const AudioBusesLayout& arr)
 {
     jassert (arr.inputBuses. size() == getBusCount (true)
           && arr.outputBuses.size() == getBusCount (false));
 
-    if (arr == getAudioBusesLayouts())
+    if (arr == getAudioBusesLayout())
         return true;
 
-    AudioBusesLayouts copy = arr;
-    if (! canApplyBusesLayouts (copy))
+    AudioBusesLayout copy = arr;
+    if (! canApplyBusesLayout (copy))
         return false;
 
     return applyBusLayouts (copy);
 }
 
-bool AudioProcessor::setAudioBusesLayoutsWithoutEnabling (const AudioBusesLayouts& arr)
+bool AudioProcessor::setAudioBusesLayoutWithoutEnabling (const AudioBusesLayout& arr)
 {
     const int numIns = getBusCount (true);
     const int numOuts = getBusCount (false);
@@ -146,8 +146,8 @@ bool AudioProcessor::setAudioBusesLayoutsWithoutEnabling (const AudioBusesLayout
     jassert (arr.inputBuses. size() == numIns
           && arr.outputBuses.size() == numOuts);
 
-    AudioBusesLayouts request = arr;
-    const AudioBusesLayouts current = getAudioBusesLayouts();
+    AudioBusesLayout request = arr;
+    const AudioBusesLayout current = getAudioBusesLayout();
 
     for (int i = 0; i < numIns; ++i)
         if (request.getNumChannels (true, i) == 0)
@@ -157,7 +157,7 @@ bool AudioProcessor::setAudioBusesLayoutsWithoutEnabling (const AudioBusesLayout
         if (request.getNumChannels (false, i) == 0)
             request.getChannelSet (false, i) = current.getChannelSet (false, i);
 
-    if (! checkAudioBusesLayoutsSupported(request))
+    if (! checkAudioBusesLayoutSupported(request))
         return false;
 
     for (int dir = 0; dir < 2; ++dir)
@@ -179,12 +179,12 @@ bool AudioProcessor::setAudioBusesLayoutsWithoutEnabling (const AudioBusesLayout
         }
     }
 
-    return setAudioBusesLayouts (request);
+    return setAudioBusesLayout (request);
 }
 
-AudioProcessor::AudioBusesLayouts AudioProcessor::getAudioBusesLayouts() const
+AudioProcessor::AudioBusesLayout AudioProcessor::getAudioBusesLayout() const
 {
-    AudioBusesLayouts layouts;
+    AudioBusesLayout layouts;
     const int numInputs  = getBusCount (true);
     const int numOutputs = getBusCount (false);
 
@@ -210,7 +210,7 @@ bool AudioProcessor::setChannelLayoutOfBus (bool isInputBus, int busIdx, const A
 {
     if (AudioProcessorBus* bus = getBus (isInputBus, busIdx))
     {
-        AudioBusesLayouts layouts = bus->getAudioBusesLayoutsForLayoutChangeOfBus (layout);
+        AudioBusesLayout layouts = bus->getAudioBusesLayoutForLayoutChangeOfBus (layout);
 
         if (layouts.getChannelSet (isInputBus, busIdx) == layout)
             return applyBusLayouts (layouts);
@@ -226,7 +226,7 @@ bool AudioProcessor::setChannelLayoutOfBus (bool isInputBus, int busIdx, const A
 
 bool AudioProcessor::enableAllBuses ()
 {
-    AudioBusesLayouts layouts;
+    AudioBusesLayout layouts;
     const int numInputs  = getBusCount (true);
     const int numOutputs = getBusCount (false);
 
@@ -236,10 +236,10 @@ bool AudioProcessor::enableAllBuses ()
     for (int i = 0; i < numOutputs; ++i)
         layouts.outputBuses.add (getBus (false, i)->lastLayout);
 
-    return setAudioBusesLayouts (layouts);
+    return setAudioBusesLayout (layouts);
 }
 
-bool AudioProcessor::checkAudioBusesLayoutsSupported (const AudioBusesLayouts& layouts) const
+bool AudioProcessor::checkAudioBusesLayoutSupported (const AudioBusesLayout& layouts) const
 {
     const int numInputBuses  = getBusCount (true);
     const int numOutputBuses = getBusCount (false);
@@ -251,7 +251,7 @@ bool AudioProcessor::checkAudioBusesLayoutsSupported (const AudioBusesLayouts& l
     return false;
 }
 
-AudioProcessor::AudioBusesLayouts AudioProcessor::getNextBestLayout (const AudioBusesLayouts& layouts) const
+AudioProcessor::AudioBusesLayout AudioProcessor::getNextBestLayout (const AudioBusesLayout& layouts) const
 {
     // if you are hitting this assertion then you are requesting a next
     // best layout which does not have the same number of buses as the
@@ -259,11 +259,11 @@ AudioProcessor::AudioBusesLayouts AudioProcessor::getNextBestLayout (const Audio
     jassert (layouts.inputBuses. size() == getBusCount (true)
           && layouts.outputBuses.size() == getBusCount (false));
 
-    if (checkAudioBusesLayoutsSupported (layouts)) return layouts;
+    if (checkAudioBusesLayoutSupported (layouts)) return layouts;
 
-    AudioBusesLayouts originalState = getAudioBusesLayouts();
-    AudioBusesLayouts currentState = originalState;
-    AudioBusesLayouts bestSupported = currentState;
+    AudioBusesLayout originalState = getAudioBusesLayout();
+    AudioBusesLayout currentState = originalState;
+    AudioBusesLayout bestSupported = currentState;
 
     for (int dir = 0; dir < 2; ++dir)
     {
@@ -289,7 +289,7 @@ AudioProcessor::AudioBusesLayouts AudioProcessor::getNextBestLayout (const Audio
 
             // already supported?
             current = requested;
-            if (checkAudioBusesLayoutsSupported (currentState))
+            if (checkAudioBusesLayoutSupported (currentState))
             {
                 bestSupported = currentState;
                 continue;
@@ -302,7 +302,7 @@ AudioProcessor::AudioBusesLayouts AudioProcessor::getNextBestLayout (const Audio
                 AudioChannelSet& oppositeLayout = (oppositeDirection ? currentState.inputBuses : currentState.outputBuses).getReference (busIdx);
                 oppositeLayout = requested;
 
-                if (checkAudioBusesLayoutsSupported (currentState))
+                if (checkAudioBusesLayoutSupported (currentState))
                 {
                     bestSupported = currentState;
                     continue;
@@ -310,7 +310,7 @@ AudioProcessor::AudioBusesLayouts AudioProcessor::getNextBestLayout (const Audio
 
                 // try setting the default layout
                 oppositeLayout = getBus (oppositeDirection, busIdx)->getDefaultLayout();
-                if (checkAudioBusesLayoutsSupported (currentState))
+                if (checkAudioBusesLayoutSupported (currentState))
                 {
                     bestSupported = currentState;
                     continue;
@@ -318,7 +318,7 @@ AudioProcessor::AudioBusesLayouts AudioProcessor::getNextBestLayout (const Audio
             }
 
             // try setting all other buses to the identical layout
-            AudioBusesLayouts allTheSame;
+            AudioBusesLayout allTheSame;
             for (int oDir = 0; oDir < 2; ++oDir)
             {
                 const bool oIsInput = (oDir == 0);
@@ -328,7 +328,7 @@ AudioProcessor::AudioBusesLayouts AudioProcessor::getNextBestLayout (const Audio
                     (oIsInput ? allTheSame.inputBuses : allTheSame.outputBuses).add (requested);
             }
 
-            if (checkAudioBusesLayoutsSupported (allTheSame))
+            if (checkAudioBusesLayoutSupported (allTheSame))
             {
                 bestSupported = allTheSame;
                 continue;
@@ -341,7 +341,7 @@ AudioProcessor::AudioBusesLayouts AudioProcessor::getNextBestLayout (const Audio
             if (abs (defaultLayout.size() - requested.size()) < distance)
             {
                 current = defaultLayout;
-                if (checkAudioBusesLayoutsSupported (currentState))
+                if (checkAudioBusesLayoutSupported (currentState))
                     bestSupported = currentState;
             }
         }
@@ -757,7 +757,7 @@ AudioProcessor::AudioIOProperties AudioProcessor::busIOFromLayoutArray (const Ar
     return ioProps;
 }
 
-AudioProcessor::AudioBusesLayouts AudioProcessor::getNextBestLayoutInList (const AudioBusesLayouts& layouts,
+AudioProcessor::AudioBusesLayout AudioProcessor::getNextBestLayoutInList (const AudioBusesLayout& layouts,
                                                                          const Array<InOutChannelPair>& legacyLayouts) const
 {
     const int numChannelConfigs = legacyLayouts.size();
@@ -780,7 +780,7 @@ AudioProcessor::AudioBusesLayouts AudioProcessor::getNextBestLayoutInList (const
         }
     }
 
-    AudioBusesLayouts nearest = layouts;
+    AudioBusesLayout nearest = layouts;
     nearest.inputBuses .resize (hasInputs  ? 1 : 0);
     nearest.outputBuses.resize (hasOutputs ? 1 : 0);
 
@@ -814,7 +814,7 @@ AudioProcessor::AudioBusesLayouts AudioProcessor::getNextBestLayoutInList (const
     const int16 inChannels  = legacyLayouts.getReference (bestConfiguration).inChannels;
     const int16 outChannels = legacyLayouts.getReference (bestConfiguration).outChannels;
 
-    AudioBusesLayouts currentState = getAudioBusesLayouts();
+    AudioBusesLayout currentState = getAudioBusesLayout();
     AudioChannelSet currentInLayout  = (getBusCount (true)  > 0 ? currentState.inputBuses .getReference(0) : AudioChannelSet());
     AudioChannelSet currentOutLayout = (getBusCount (false) > 0 ? currentState.outputBuses.getReference(0) : AudioChannelSet());
 
@@ -838,7 +838,7 @@ AudioProcessor::AudioBusesLayouts AudioProcessor::getNextBestLayoutInList (const
     return nearest;
 }
 
-bool AudioProcessor::containsLayout (const AudioBusesLayouts& layouts, const Array<InOutChannelPair>& channelLayouts)
+bool AudioProcessor::containsLayout (const AudioBusesLayout& layouts, const Array<InOutChannelPair>& channelLayouts)
 {
     if (layouts.inputBuses.size() > 1 || layouts.outputBuses.size() > 1)
         return false;
@@ -853,7 +853,7 @@ bool AudioProcessor::containsLayout (const AudioBusesLayouts& layouts, const Arr
 //==============================================================================
 bool AudioProcessor::disableNonMainBuses ()
 {
-    AudioBusesLayouts layouts = getAudioBusesLayouts();
+    AudioBusesLayout layouts = getAudioBusesLayout();
 
     for (int busIdx = 1; busIdx < layouts.inputBuses.size(); ++busIdx)
         layouts.inputBuses.getReference (busIdx) = AudioChannelSet::disabled();
@@ -861,7 +861,7 @@ bool AudioProcessor::disableNonMainBuses ()
     for (int busIdx = 1; busIdx < layouts.outputBuses.size(); ++busIdx)
         layouts.outputBuses.getReference (busIdx) = AudioChannelSet::disabled();
 
-    return setAudioBusesLayouts (layouts);
+    return setAudioBusesLayout (layouts);
 }
 
 // Unfortunately the deprecated getInputSpeakerArrangement/getOutputSpeakerArrangement return
@@ -879,9 +879,9 @@ void AudioProcessor::updateSpeakerFormatStrings()
         cachedOutputSpeakerArrString = getBus (false, 0)->getCurrentLayout().getSpeakerArrangementAsString();
 }
 
-bool AudioProcessor::applyBusLayouts (const AudioBusesLayouts& layouts)
+bool AudioProcessor::applyBusLayouts (const AudioBusesLayout& layouts)
 {
-    if (layouts == getAudioBusesLayouts())
+    if (layouts == getAudioBusesLayout())
         return true;
 
     const int numInputBuses  = getBusCount (true);
@@ -1152,7 +1152,7 @@ bool AudioProcessor::AudioProcessorBus::isLayoutSupported (const AudioChannelSet
     int busIdx;
     busDirAndIndex (isInputBus, busIdx);
 
-    AudioBusesLayouts layouts = getAudioBusesLayoutsForLayoutChangeOfBus (set);
+    AudioBusesLayout layouts = getAudioBusesLayoutForLayoutChangeOfBus (set);
     return (layouts.getChannelSet (isInputBus, busIdx) == set);
 }
 
@@ -1177,13 +1177,13 @@ AudioChannelSet AudioProcessor::AudioProcessorBus::supportedLayoutWithChannels (
     return AudioChannelSet::disabled();
 }
 
-AudioProcessor::AudioBusesLayouts AudioProcessor::AudioProcessorBus::getAudioBusesLayoutsForLayoutChangeOfBus (const AudioChannelSet& set) const
+AudioProcessor::AudioBusesLayout AudioProcessor::AudioProcessorBus::getAudioBusesLayoutForLayoutChangeOfBus (const AudioChannelSet& set) const
 {
     bool isInputBus;
     int busIdx;
     busDirAndIndex (isInputBus, busIdx);
 
-    AudioBusesLayouts currentLayout = owner.getAudioBusesLayouts();
+    AudioBusesLayout currentLayout = owner.getAudioBusesLayout();
     Array<AudioChannelSet>& potentialBusLayout =
         (isInputBus ? currentLayout.inputBuses : currentLayout.outputBuses);
 
@@ -1192,7 +1192,7 @@ AudioProcessor::AudioBusesLayouts AudioProcessor::AudioProcessorBus::getAudioBus
 
     potentialBusLayout.getReference (busIdx) = set;
 
-    AudioBusesLayouts nearest = owner.getNextBestLayout (currentLayout);
+    AudioBusesLayout nearest = owner.getNextBestLayout (currentLayout);
 
     // Nearest layout has a different number of buses. JUCE plug-ins MUST
     // have fixed number of buses.

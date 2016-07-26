@@ -179,7 +179,7 @@ public:
 
         addAndMakeVisible (applyButton);
 
-        currentLayout = p->getAudioBusesLayouts();
+        currentLayout = p->getAudioBusesLayout();
 
         if (inConfig != nullptr)
             inConfig->updateBusConfig (currentLayout.inputBuses);
@@ -239,10 +239,10 @@ public:
 
         if (AudioProcessor* p = getAudioProcessor())
         {
-            if (currentLayout != p->getAudioBusesLayouts())
+            if (currentLayout != p->getAudioBusesLayout())
             {
                 suspend();
-                wasSuccesful = p->setAudioBusesLayouts (currentLayout);
+                wasSuccesful = p->setAudioBusesLayout (currentLayout);
                 resume();
             }
 
@@ -255,7 +255,7 @@ public:
 
     void updateConfig (const AudioChannelSet& set, bool isInput, int busIdx)
     {
-        AudioProcessor::AudioBusesLayouts newLayout = currentLayout;
+        AudioProcessor::AudioBusesLayout newLayout = currentLayout;
         newLayout.getChannelSet (isInput, busIdx) = set;
 
         if (currentLayout != newLayout)
@@ -283,7 +283,7 @@ public:
 
             if (wasSuccesful)
             {
-                currentLayout = p->getAudioBusesLayouts();
+                currentLayout = p->getAudioBusesLayout();
 
                 if (inConfig != nullptr)
                     inConfig->updateBusConfig (currentLayout.inputBuses);
@@ -313,7 +313,7 @@ public:
 
             if (wasSuccesful)
             {
-                currentLayout = p->getAudioBusesLayouts();
+                currentLayout = p->getAudioBusesLayout();
 
                 if (inConfig != nullptr)
                     inConfig->updateBusConfig (currentLayout.inputBuses);
@@ -777,7 +777,7 @@ private:
     };
 
     //==============================================================================
-    AudioProcessor::AudioBusesLayouts currentLayout;
+    AudioProcessor::AudioBusesLayout currentLayout;
     Label title;
     ScopedPointer<InputOutputConfig> inConfig, outConfig;
     TextButton applyButton;

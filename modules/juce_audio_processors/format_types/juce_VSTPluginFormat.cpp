@@ -928,14 +928,14 @@ public:
     bool canAddBus (bool) const override                                       { return false; }
     bool canRemoveBus (bool) const override                                    { return false; }
 
-    bool isAudioBusesLayoutSupported (const AudioBusesLayouts& layouts) const override
+    bool isAudioBusesLayoutSupported (const AudioBusesLayout& layouts) const override
     {
         const int numInputBuses  = getBusCount (true);
         const int numOutputBuses = getBusCount (false);
 
         // it's not possible to change layout if there are sidechains/aux buses
         if (numInputBuses > 1 || numOutputBuses > 1)
-            return (layouts == getAudioBusesLayouts());
+            return (layouts == getAudioBusesLayout());
 
         return (layouts.getNumChannels (true,  0) <= vstEffect->numInputs
              && layouts.getNumChannels (false, 0) <= vstEffect->numOutputs);
